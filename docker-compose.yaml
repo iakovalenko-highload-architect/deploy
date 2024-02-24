@@ -1,0 +1,47 @@
+version: '3'
+
+services:
+  db-monolith:
+    image: postgres:15.1
+    container_name: db-monolith
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_DB=master
+    volumes:
+      - ./monolith/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+  monolith:
+    image: ghcr.io/iakovalenko-highload-architect/monolith:latest
+    container_name: monolith
+    restart: unless-stopped
+    volumes:
+      - ./monolith/.env:/project/.env
+    networks:
+      - app-network
+    ports:
+      - "8080:8080"
+  db-dialog:
+    image: postgres:15.1
+    container_name: db-dialog
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_DB=master
+    volumes:
+      - ./service-dialog/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - service-dialog-network
+  service-dialog:
+    image: ghcr.io/iakovalenko-highload-architect/service-dialog:latest
+    container_name: service-dialog
+    restart: unless-stopped
+    volumes:
+      - ./service-dialog/.env:/project/.env
+    networks:
+      - service-dialog-network
+      - app-network
+networks:
+  app-network:
+  service-dialog-network:
