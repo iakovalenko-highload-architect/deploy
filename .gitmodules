@@ -1,0 +1,8 @@
+[submodule "monolith"]
+	path = monolith
+	url = https://github.com/iakovalenko-highload-architect/monolith
+	branch = hw-3
+[submodule "service-dialog"]
+	path = service-dialog
+	url = https://github.com/iakovalenko-highload-architect/service-dialog
+	branch = hw-3
