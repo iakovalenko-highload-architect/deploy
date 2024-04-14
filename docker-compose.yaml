@@ -1,6 +1,13 @@
 version: '3'
 
 services:
+  feed-cache:
+    image: redis:latest
+    restart: always
+    environment:
+      - REDIS_PASSWORD=pass
+    networks:
+      - app-network
   db-monolith-master:
     image: postgres:15.1
     container_name: db-monolith
@@ -16,70 +23,102 @@ services:
     image: ghcr.io/iakovalenko-highload-architect/monolith:latest
     container_name: monolith
     restart: unless-stopped
+    depends_on:
+      - db-monolith-master
+      - feed-cache
     volumes:
-      - ./monolith/.env:/project/.env
+      - ./envs/monolith.env:/project/.env
     networks:
       - app-network
     ports:
       - "8080:8080"
-#  db-dialog:
-#    image: postgres:15.1
-#    container_name: db-dialog
-#    restart: unless-stopped
-#    environment:
-#      - POSTGRES_HOST_AUTH_METHOD=trust
-#      - POSTGRES_DB=master
-#    volumes:
-#      - ./service-dialog/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
-#    networks:
-#      - service-dialog-network
+  db-dialog:
+    image: postgres:15.1
+    container_name: db-dialog
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_DB=master
+    volumes:
+      - ./service-dialog/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - service-dialog-network
   service-dialog:
     image: ghcr.io/iakovalenko-highload-architect/service-dialog:latest
     container_name: service-dialog
     restart: unless-stopped
+    depends_on:
+      - db-dialog
     volumes:
-      - ./service-dialog/.env:/project/.env
+      - ./envs/service-dialog.env:/project/.env
     networks:
       - service-dialog-network
       - app-network
-  master:
-    container_name: "${COMPOSE_PROJECT_NAME:-citus}_master"
-    image: "citusdata/citus:12.1.2"
-    labels: [ "com.citusdata.role=Master" ]
-    environment: &AUTH
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      PGUSER: "${POSTGRES_USER:-postgres}"
-      PGPASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_HOST_AUTH_METHOD: "${POSTGRES_HOST_AUTH_METHOD:-trust}"
-#    volumes:
-#      - ./service-dialog/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
+  service-post-notification:
+    image: ghcr.io/iakovalenko-highload-architect/service-post-notification:latest
+    container_name: service-post-notification
+    restart: unless-stopped
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./envs/service-post-notification.env:/project/.env
+    networks:
+      - app-network
     ports:
-      - "5432:5432"
-    networks:
-      - service-dialog-network
-  worker:
-    image: "citusdata/citus:12.1.2"
-    labels: [ "com.citusdata.role=Worker" ]
-    depends_on: [ manager ]
-    environment: *AUTH
-    command: "/wait-for-manager.sh"
+      - "1323:1323"
+  rabbitmq:
+    image: rabbitmq:3.10.7-management
+    hostname: rabbitmq
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=RM_USER_qvaw132
+      - RABBITMQ_DEFAULT_PASS=fanrnui21hda98n
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit log_levels [{connection,error},{default,error}] disk_free_limit 2147483648
     volumes:
-      - healthcheck-volume:/healthcheck
+      - ./rabbitmq:/var/lib/rabbitmq
     networks:
-      - service-dialog-network
-  manager:
-    container_name: "${COMPOSE_PROJECT_NAME:-citus}_manager"
-    image: "citusdata/membership-manager:0.3.0"
-    volumes:
-      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
-      - healthcheck-volume:/healthcheck
-    depends_on: [ master ]
-    environment: *AUTH
-    networks:
-      - service-dialog-network
+      - app-network
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+#  master:
+#    container_name: "${COMPOSE_PROJECT_NAME:-citus}_master"
+#    image: "citusdata/citus:12.1.2"
+#    labels: [ "com.citusdata.role=Master" ]
+#    environment: &AUTH
+#      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+#      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+#      PGUSER: "${POSTGRES_USER:-postgres}"
+#      PGPASSWORD: "${POSTGRES_PASSWORD}"
+#      POSTGRES_HOST_AUTH_METHOD: "${POSTGRES_HOST_AUTH_METHOD:-trust}"
+##    volumes:
+##      - ./service-dialog/db/master/init.sql:/docker-entrypoint-initdb.d/init.sql
+#    ports:
+#      - "5432:5432"
+#    networks:
+#      - service-dialog-network
+#  worker:
+#    image: "citusdata/citus:12.1.2"
+#    labels: [ "com.citusdata.role=Worker" ]
+#    depends_on: [ manager ]
+#    environment: *AUTH
+#    command: "/wait-for-manager.sh"
+#    volumes:
+#      - healthcheck-volume:/healthcheck
+#    networks:
+#      - service-dialog-network
+#  manager:
+#    container_name: "${COMPOSE_PROJECT_NAME:-citus}_manager"
+#    image: "citusdata/membership-manager:0.3.0"
+#    volumes:
+#      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
+#      - healthcheck-volume:/healthcheck
+#    depends_on: [ master ]
+#    environment: *AUTH
+#    networks:
+#      - service-dialog-network
 networks:
   app-network:
   service-dialog-network:
-volumes:
-  healthcheck-volume:
+#volumes:
+#  healthcheck-volume:
